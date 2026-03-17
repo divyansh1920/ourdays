@@ -63,8 +63,15 @@ const LinkPartner = () => {
     setError("");
     const code = joinCode.trim().toUpperCase();
 
+    if (code.length !== 6) {
+      setError("Please enter a 6 letter code 💕");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const coupleDoc = await getDoc(doc(db, "couples", code));
+      const coupleDocRef = doc(db, "couples", code);
+      const coupleDoc = await getDoc(coupleDocRef);
 
       if (!coupleDoc.exists()) {
         setError("Room not found! Double check the code 💕");
@@ -73,22 +80,35 @@ const LinkPartner = () => {
       }
 
       const coupleData = coupleDoc.data();
+      const currentMembers = coupleData.members || [];
 
-      if (coupleData.members.includes(currentUser.uid)) {
-        setError("You are already in this room! 🌸");
-        setLoading(false);
+      // Already in this exact room — just navigate
+      if (currentMembers.includes(currentUser.uid)) {
+        await setDoc(
+          doc(db, "users", currentUser.uid),
+          {
+            coupleId: code,
+            displayName: currentUser.displayName || "",
+            email: currentUser.email,
+          },
+          { merge: true }
+        );
+        await refreshCoupleId();
+        navigate("/");
         return;
       }
 
-      if (coupleData.members.length >= 2) {
+      // Room is full
+      if (currentMembers.length >= 2) {
         setError("This room already has two people 💕");
         setLoading(false);
         return;
       }
 
+      // Join the room
       await setDoc(
-        doc(db, "couples", code),
-        { members: [...coupleData.members, currentUser.uid] },
+        coupleDocRef,
+        { members: [...currentMembers, currentUser.uid] },
         { merge: true }
       );
 
@@ -139,7 +159,7 @@ const LinkPartner = () => {
         className="float-animation"
       >🌸</span>
       <span
-        style={{ ...styles.floatEl, top: "12%", right: "8%", fontSize: "1.5rem", animationDelay: "1s" }}
+        style={{ ...styles.floatEl, top: "12%", right: "20%", fontSize: "1.5rem", animationDelay: "1s" }}
         className="float-animation"
       >💕</span>
       <span
@@ -151,10 +171,15 @@ const LinkPartner = () => {
         className="float-animation"
       >✨</span>
 
-      {/* Sign out button */}
-      <button style={styles.logoutBtn} onClick={handleLogout}>
-        👋 Sign Out
-      </button>
+      {/* Top buttons */}
+      <div style={styles.topBtns}>
+        <button style={styles.homeBtn} onClick={() => navigate("/")}>
+          🏡 Back to Home
+        </button>
+        <button style={styles.logoutBtn} onClick={handleLogout}>
+          👋 Sign Out
+        </button>
+      </div>
 
       <div style={styles.scrollWrap}>
         <div style={styles.card} className="fade-in-up">
@@ -214,7 +239,7 @@ const LinkPartner = () => {
                 </button>
               </div>
 
-              {/* Error shown at bottom of initial screen */}
+              {/* Error on initial screen */}
               {error && (
                 <div style={styles.errorBox}>⚠️ {error}</div>
               )}
@@ -337,8 +362,18 @@ const styles = {
   floatEl: {
     position: "fixed", pointerEvents: "none", zIndex: 0, userSelect: "none",
   },
+  topBtns: {
+    position: "fixed", top: "84px", right: "20px",
+    zIndex: 100, display: "flex", gap: "10px", alignItems: "center",
+  },
+  homeBtn: {
+    background: "linear-gradient(135deg, #ff85a1, #ff4d6d)",
+    border: "none", borderRadius: "12px", padding: "8px 16px",
+    fontSize: "0.85rem", fontWeight: "600", color: "white",
+    fontFamily: "'Nunito', sans-serif", cursor: "pointer",
+    boxShadow: "0 4px 14px rgba(255,77,109,0.3)",
+  },
   logoutBtn: {
-    position: "fixed", top: "20px", right: "20px", zIndex: 100,
     background: "rgba(255,255,255,0.85)",
     border: "1px solid rgba(255,182,193,0.5)",
     borderRadius: "12px", padding: "8px 16px",

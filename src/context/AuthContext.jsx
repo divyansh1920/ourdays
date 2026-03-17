@@ -40,19 +40,28 @@ export const AuthProvider = ({ children }) => {
   };
 
   const loadCoupleId = async (uid) => {
-    const userDoc = await getDoc(doc(db, "users", uid));
-    if (userDoc.exists()) {
-      const data = userDoc.data();
-      setCoupleId(data.coupleId || null);
-      return data.coupleId || null;
+    try {
+      const userDoc = await getDoc(doc(db, "users", uid));
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        const id = data.coupleId || null;
+        setCoupleId(id);
+        return id;
+      }
+      setCoupleId(null);
+      return null;
+    } catch (err) {
+      console.error("Error loading coupleId:", err);
+      setCoupleId(null);
+      return null;
     }
-    return null;
   };
 
   const refreshCoupleId = async () => {
     if (currentUser) {
-      await loadCoupleId(currentUser.uid);
+      return await loadCoupleId(currentUser.uid);
     }
+    return null;
   };
 
   useEffect(() => {
