@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/ourdays/static/css/main.08bb986b.css",
+    "main.js": "/ourdays/static/js/main.de9a5ba5.js",
+    "index.html": "/ourdays/index.html",
+    "main.08bb986b.css.map": "/ourdays/static/css/main.08bb986b.css.map",
+    "main.de9a5ba5.js.map": "/ourdays/static/js/main.de9a5ba5.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.08bb986b.css",
+    "static/js/main.de9a5ba5.js"
+  ]
+}
