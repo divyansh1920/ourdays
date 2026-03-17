@@ -1,8 +1,7 @@
 import React, { useState, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../firebase/config";
+import { db,} from "../firebase/config";
 import { useAuth } from "../context/AuthContext";
 
 const MOODS = [
@@ -75,30 +74,46 @@ const NewEntry = () => {
   };
 
   const uploadFiles = async () => {
-    if (files.length === 0) return [];
-    const urls = [];
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const storageRef = ref(storage, `entries/${currentUser.uid}/${Date.now()}_${file.name}`);
-      await new Promise((resolve, reject) => {
-        const uploadTask = uploadBytesResumable(storageRef, file);
-        uploadTask.on(
-          "state_changed",
-          (snapshot) => {
-            const progress = ((i / files.length) + (snapshot.bytesTransferred / snapshot.totalBytes / files.length)) * 100;
-            setUploadProgress(Math.round(progress));
-          },
-          reject,
-          async () => {
-            const url = await getDownloadURL(uploadTask.snapshot.ref);
-            urls.push({ url, type: file.type, name: file.name });
-            resolve();
-          }
-        );
+  if (files.length === 0) return [];
+  const urls = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append(
+      "upload_preset",
+      process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET
+    );
+    formData.append("folder", "ourdays");
+
+    const resourceType = file.type.startsWith("video/")
+      ? "video"
+      : file.type.startsWith("audio/")
+      ? "video"
+      : "image";
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
+      { method: "POST", body: formData }
+    );
+
+    const data = await response.json();
+
+    if (data.secure_url) {
+      urls.push({
+        url: data.secure_url,
+        type: file.type,
+        name: file.name,
+        publicId: data.public_id,
       });
     }
-    return urls;
-  };
+
+    setUploadProgress(Math.round(((i + 1) / files.length) * 100));
+  }
+
+  return urls;
+};
 
   const handleSubmit = async (e) => {
     e.preventDefault();
