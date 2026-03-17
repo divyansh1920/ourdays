@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { db,} from "../firebase/config";
+import { db} from "../firebase/config";
 import { useAuth } from "../context/AuthContext";
 
 const MOODS = [

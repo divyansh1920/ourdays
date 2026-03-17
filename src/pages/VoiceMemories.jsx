@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../firebase/config";
+import { db } from "../firebase/config";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -118,41 +117,49 @@ const VoiceMemories = () => {
   };
 
   const saveRecording = async () => {
-    if (!audioBlob) return;
-    setUploading(true);
+  if (!audioBlob) return;
+  setUploading(true);
 
-    try {
-      const fileName = `voice_${Date.now()}.webm`;
-      const storageRef = ref(storage, `voiceMemories/${currentUser.uid}/${fileName}`);
-      const uploadTask = uploadBytesResumable(storageRef, audioBlob);
+  try {
+    const formData = new FormData();
+    formData.append("file", audioBlob, "voice_memory.webm");
+    formData.append(
+      "upload_preset",
+      process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET
+    );
+    formData.append("folder", "ourdays/voice");
 
-      await new Promise((resolve, reject) => {
-        uploadTask.on("state_changed", null, reject, resolve);
-      });
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/video/upload`,
+      { method: "POST", body: formData }
+    );
 
-      const url = await getDownloadURL(uploadTask.snapshot.ref);
+    const data = await response.json();
 
-      const { addDoc, serverTimestamp } = await import("firebase/firestore");
-      await addDoc(collection(db, "voiceMemories"), {
-        url,
-        title: recordingTitle.trim() || "A voice memory",
-        duration: recordingTime,
-        authorId: currentUser.uid,
-        authorName: currentUser.displayName || currentUser.email,
-        createdAt: serverTimestamp(),
-        date: new Date().toISOString().split("T")[0],
-      });
+    if (!data.secure_url) throw new Error("Upload failed");
 
-      setUploadSuccess(true);
-      discardRecording();
-      setTimeout(() => setUploadSuccess(false), 3000);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save recording 😢 Please try again.");
-    }
+    const { addDoc, serverTimestamp } = await import("firebase/firestore");
+    await addDoc(collection(db, "voiceMemories"), {
+      url: data.secure_url,
+      publicId: data.public_id,
+      title: recordingTitle.trim() || "A voice memory",
+      duration: recordingTime,
+      authorId: currentUser.uid,
+      authorName: currentUser.displayName || currentUser.email,
+      createdAt: serverTimestamp(),
+      date: new Date().toISOString().split("T")[0],
+    });
 
-    setUploading(false);
-  };
+    setUploadSuccess(true);
+    discardRecording();
+    setTimeout(() => setUploadSuccess(false), 3000);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to save recording 😢 Please try again.");
+  }
+
+  setUploading(false);
+};
 
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, "0");
