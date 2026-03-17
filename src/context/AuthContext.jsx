@@ -6,37 +6,63 @@ import {
   onAuthStateChanged,
   updateProfile,
 } from "firebase/auth";
-import { auth } from "../firebase/config";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { auth, db } from "../firebase/config";
 
 const AuthContext = createContext();
 
-export const useAuth = () => {
-  return useContext(AuthContext);
-};
+export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
+  const [coupleId, setCoupleId] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const signup = (email, password, displayName) => {
-    return createUserWithEmailAndPassword(auth, email, password).then(
-      (result) => {
-        return updateProfile(result.user, { displayName });
-      }
-    );
+  const signup = async (email, password, displayName) => {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(result.user, { displayName });
+    await setDoc(doc(db, "users", result.user.uid), {
+      displayName,
+      email,
+      coupleId: null,
+      createdAt: new Date().toISOString(),
+    });
+    return result;
   };
 
   const login = (email, password) => {
     return signInWithEmailAndPassword(auth, email, password);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    setCoupleId(null);
     return signOut(auth);
   };
 
+  const loadCoupleId = async (uid) => {
+    const userDoc = await getDoc(doc(db, "users", uid));
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      setCoupleId(data.coupleId || null);
+      return data.coupleId || null;
+    }
+    return null;
+  };
+
+  const refreshCoupleId = async () => {
+    if (currentUser) {
+      await loadCoupleId(currentUser.uid);
+    }
+  };
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
+      if (user) {
+        await loadCoupleId(user.uid);
+      } else {
+        setCoupleId(null);
+      }
       setLoading(false);
     });
     return unsubscribe;
@@ -44,9 +70,11 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     currentUser,
+    coupleId,
     signup,
     login,
     logout,
+    refreshCoupleId,
   };
 
   return (

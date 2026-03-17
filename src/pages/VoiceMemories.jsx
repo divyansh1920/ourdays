@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import {
+  collection, query, orderBy, onSnapshot,
+  where, addDoc, serverTimestamp
+} from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
 const VoiceMemories = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, coupleId } = useAuth();
   const navigate = useNavigate();
 
   const [audioEntries, setAudioEntries] = useState([]);
@@ -28,14 +31,19 @@ const VoiceMemories = () => {
   const streamRef = useRef(null);
 
   useEffect(() => {
-    const q = query(collection(db, "voiceMemories"), orderBy("createdAt", "desc"));
+    if (!coupleId) return;
+    const q = query(
+      collection(db, "voiceMemories"),
+      where("coupleId", "==", coupleId),
+      orderBy("createdAt", "desc")
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setAudioEntries(data);
       setLoading(false);
     });
     return unsubscribe;
-  }, []);
+  }, [coupleId]);
 
   useEffect(() => {
     return () => {
@@ -52,7 +60,6 @@ const VoiceMemories = () => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      // Visualizer setup
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
@@ -117,49 +124,48 @@ const VoiceMemories = () => {
   };
 
   const saveRecording = async () => {
-  if (!audioBlob) return;
-  setUploading(true);
+    if (!audioBlob) return;
+    setUploading(true);
 
-  try {
-    const formData = new FormData();
-    formData.append("file", audioBlob, "voice_memory.webm");
-    formData.append(
-      "upload_preset",
-      process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET
-    );
-    formData.append("folder", "ourdays/voice");
+    try {
+      const formData = new FormData();
+      formData.append("file", audioBlob, "voice_memory.webm");
+      formData.append(
+        "upload_preset",
+        process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET
+      );
+      formData.append("folder", "ourdays/voice");
 
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/video/upload`,
-      { method: "POST", body: formData }
-    );
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/video/upload`,
+        { method: "POST", body: formData }
+      );
 
-    const data = await response.json();
+      const data = await response.json();
+      if (!data.secure_url) throw new Error("Upload failed");
 
-    if (!data.secure_url) throw new Error("Upload failed");
+      await addDoc(collection(db, "voiceMemories"), {
+        url: data.secure_url,
+        publicId: data.public_id,
+        title: recordingTitle.trim() || "A voice memory",
+        duration: recordingTime,
+        coupleId,
+        authorId: currentUser.uid,
+        authorName: currentUser.displayName || currentUser.email,
+        createdAt: serverTimestamp(),
+        date: new Date().toISOString().split("T")[0],
+      });
 
-    const { addDoc, serverTimestamp } = await import("firebase/firestore");
-    await addDoc(collection(db, "voiceMemories"), {
-      url: data.secure_url,
-      publicId: data.public_id,
-      title: recordingTitle.trim() || "A voice memory",
-      duration: recordingTime,
-      authorId: currentUser.uid,
-      authorName: currentUser.displayName || currentUser.email,
-      createdAt: serverTimestamp(),
-      date: new Date().toISOString().split("T")[0],
-    });
+      setUploadSuccess(true);
+      discardRecording();
+      setTimeout(() => setUploadSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save recording 😢 Please try again.");
+    }
 
-    setUploadSuccess(true);
-    discardRecording();
-    setTimeout(() => setUploadSuccess(false), 3000);
-  } catch (err) {
-    console.error(err);
-    alert("Failed to save recording 😢 Please try again.");
-  }
-
-  setUploading(false);
-};
+    setUploading(false);
+  };
 
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, "0");
@@ -181,7 +187,6 @@ const VoiceMemories = () => {
       <div style={styles.blob2} />
 
       <div style={styles.container}>
-
         {/* Header */}
         <div style={styles.header} className="fade-in-up">
           <span style={{ fontSize: "2.5rem" }}>🎙️</span>
@@ -201,7 +206,9 @@ const VoiceMemories = () => {
           <div style={styles.statCard}>
             <span style={{ fontSize: "1.8rem" }}>⏱️</span>
             <span style={styles.statValue}>
-              {formatTime(audioEntries.reduce((acc, e) => acc + (e.duration || 0), 0))}
+              {formatTime(
+                audioEntries.reduce((acc, e) => acc + (e.duration || 0), 0)
+              )}
             </span>
             <span style={styles.statLabel}>Total Duration</span>
           </div>
@@ -230,9 +237,11 @@ const VoiceMemories = () => {
                   ...styles.visualizerBar,
                   height: `${height}px`,
                   background: recording
-                    ? `linear-gradient(to top, #ff4d6d, #b48aff)`
+                    ? "linear-gradient(to top, #ff4d6d, #b48aff)"
                     : "linear-gradient(to top, #ffb3c1, #ede0ff)",
-                  transition: recording ? "height 0.1s ease" : "height 0.5s ease",
+                  transition: recording
+                    ? "height 0.1s ease"
+                    : "height 0.5s ease",
                 }}
               />
             ))}
@@ -241,9 +250,16 @@ const VoiceMemories = () => {
           {/* Timer */}
           {(recording || audioBlob) && (
             <div style={styles.timerDisplay}>
-              <div style={{ ...styles.timerDot, background: recording ? "#ff4d6d" : "#b48aff" }} />
+              <div
+                style={{
+                  ...styles.timerDot,
+                  background: recording ? "#ff4d6d" : "#b48aff",
+                }}
+              />
               <span style={styles.timerText}>
-                {recording ? `Recording... ${formatTime(recordingTime)}` : `Recorded: ${formatTime(recordingTime)}`}
+                {recording
+                  ? `Recording... ${formatTime(recordingTime)}`
+                  : `Recorded: ${formatTime(recordingTime)}`}
               </span>
             </div>
           )}
@@ -265,7 +281,6 @@ const VoiceMemories = () => {
             </div>
           ) : (
             <div style={styles.previewSection}>
-              {/* Title input */}
               <input
                 type="text"
                 placeholder="Give this memory a title... 💕"
@@ -273,14 +288,10 @@ const VoiceMemories = () => {
                 onChange={(e) => setRecordingTitle(e.target.value)}
                 style={styles.titleInput}
               />
-
-              {/* Audio preview */}
               <div style={styles.audioPreview}>
                 <span style={{ fontSize: "1.5rem" }}>🎵</span>
                 <audio src={audioPreviewUrl} controls style={{ flex: 1 }} />
               </div>
-
-              {/* Action buttons */}
               <div style={styles.previewBtns}>
                 <button style={styles.discardBtn} onClick={discardRecording}>
                   🗑️ Discard
@@ -296,7 +307,6 @@ const VoiceMemories = () => {
             </div>
           )}
 
-          {/* Success message */}
           {uploadSuccess && (
             <div style={styles.successMsg}>
               🌸 Voice memory saved! You can hear it below 💕
@@ -304,7 +314,7 @@ const VoiceMemories = () => {
           )}
         </div>
 
-        {/* Saved Voice Memories */}
+        {/* Saved Memories */}
         <div style={styles.memoriesSection}>
           <h2 style={styles.sectionTitle}>Saved Voice Memories 💝</h2>
 
@@ -323,19 +333,20 @@ const VoiceMemories = () => {
             </div>
           ) : (
             <div style={styles.memoriesList}>
-              {audioEntries.map((entry, i) => (
+              {audioEntries.map((entry) => (
                 <div
                   key={entry.id}
                   style={{
                     ...styles.memoryCard,
-                    ...(currentlyPlaying === entry.id ? styles.memoryCardActive : {}),
+                    ...(currentlyPlaying === entry.id
+                      ? styles.memoryCardActive
+                      : {}),
                   }}
                   className="fade-in-up"
                 >
-                  {/* Left side */}
                   <div style={styles.memoryLeft}>
                     <div style={styles.memoryIconWrap}>
-                      <span style={styles.memoryIcon}>🎵</span>
+                      <div style={styles.memoryIcon}>🎵</div>
                       {currentlyPlaying === entry.id && (
                         <div style={styles.playingRing} />
                       )}
@@ -343,7 +354,9 @@ const VoiceMemories = () => {
                     <div style={styles.memoryInfo}>
                       <h3 style={styles.memoryTitle}>{entry.title}</h3>
                       <div style={styles.memoryMeta}>
-                        <span style={styles.memoryAuthor}>💕 {entry.authorName}</span>
+                        <span style={styles.memoryAuthor}>
+                          💕 {entry.authorName}
+                        </span>
                         <span style={styles.memoryDot}>·</span>
                         <span style={styles.memoryDate}>
                           {entry.date ? formatDate(entry.date) : ""}
@@ -359,8 +372,6 @@ const VoiceMemories = () => {
                       </div>
                     </div>
                   </div>
-
-                  {/* Audio player */}
                   <div style={styles.memoryPlayer}>
                     <audio
                       src={entry.url}
@@ -377,13 +388,11 @@ const VoiceMemories = () => {
           )}
         </div>
 
-        {/* Bottom button */}
         <div style={{ textAlign: "center", marginTop: "24px" }}>
           <button style={styles.backBtn} onClick={() => navigate("/")}>
             🏡 Back to Home
           </button>
         </div>
-
       </div>
     </div>
   );
@@ -461,21 +470,18 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "center",
     gap: "4px", height: "80px", marginBottom: "20px",
   },
-  visualizerBar: {
-    width: "8px", borderRadius: "4px",
-    minHeight: "4px",
-  },
+  visualizerBar: { width: "8px", borderRadius: "4px", minHeight: "4px" },
   timerDisplay: {
-    display: "flex", alignItems: "center", justifyContent: "center",
-    gap: "10px", marginBottom: "20px",
+    display: "flex", alignItems: "center",
+    justifyContent: "center", gap: "10px", marginBottom: "20px",
   },
   timerDot: {
     width: "10px", height: "10px", borderRadius: "50%",
     animation: "pulse-soft 1.5s infinite",
   },
   timerText: {
-    fontFamily: "'Nunito', sans-serif", fontWeight: "700",
-    color: "#3d2c2c", fontSize: "1rem",
+    fontFamily: "'Nunito', sans-serif",
+    fontWeight: "700", color: "#3d2c2c", fontSize: "1rem",
   },
   controls: { display: "flex", justifyContent: "center" },
   recordBtn: {
@@ -501,8 +507,8 @@ const styles = {
   },
   stopBtnInner: { fontSize: "1.5rem" },
   previewSection: {
-    display: "flex", flexDirection: "column", gap: "16px",
-    alignItems: "stretch",
+    display: "flex", flexDirection: "column",
+    gap: "16px", alignItems: "stretch",
   },
   titleInput: {
     padding: "14px 18px", borderRadius: "14px",
@@ -514,8 +520,8 @@ const styles = {
   },
   audioPreview: {
     display: "flex", alignItems: "center", gap: "12px",
-    background: "#fff0f3", borderRadius: "14px", padding: "14px",
-    border: "1px solid #ffb3c1",
+    background: "#fff0f3", borderRadius: "14px",
+    padding: "14px", border: "1px solid #ffb3c1",
   },
   previewBtns: { display: "flex", gap: "12px" },
   discardBtn: {
@@ -523,8 +529,7 @@ const styles = {
     border: "1px solid rgba(255,182,193,0.5)",
     borderRadius: "14px", padding: "12px",
     fontSize: "0.95rem", fontWeight: "600",
-    color: "#6b4f4f", fontFamily: "'Nunito', sans-serif",
-    cursor: "pointer",
+    color: "#6b4f4f", fontFamily: "'Nunito', sans-serif", cursor: "pointer",
   },
   saveBtn: {
     flex: 2, background: "linear-gradient(135deg, #ff85a1, #ff4d6d)",
@@ -538,8 +543,7 @@ const styles = {
     marginTop: "16px", background: "#f0fff4",
     border: "1px solid #b3ffcc", borderRadius: "14px",
     padding: "14px", fontSize: "0.9rem",
-    color: "#2d7a4f", fontFamily: "'Nunito', sans-serif",
-    fontWeight: "600",
+    color: "#2d7a4f", fontFamily: "'Nunito', sans-serif", fontWeight: "600",
   },
   memoriesSection: { marginBottom: "32px" },
   sectionTitle: {
@@ -553,8 +557,7 @@ const styles = {
     border: "1px solid rgba(255,182,193,0.3)",
     boxShadow: "0 4px 20px rgba(180,120,140,0.1)",
     display: "flex", alignItems: "center",
-    gap: "20px", flexWrap: "wrap",
-    transition: "all 0.3s ease",
+    gap: "20px", flexWrap: "wrap", transition: "all 0.3s ease",
   },
   memoryCardActive: {
     border: "1px solid #ffb3c1",
@@ -566,8 +569,8 @@ const styles = {
   memoryIcon: {
     width: "52px", height: "52px", borderRadius: "50%",
     background: "linear-gradient(135deg, #ffe4e8, #ede0ff)",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    fontSize: "1.4rem",
+    display: "flex", alignItems: "center",
+    justifyContent: "center", fontSize: "1.4rem",
   },
   playingRing: {
     position: "absolute", inset: "-4px", borderRadius: "50%",
@@ -609,9 +612,7 @@ const styles = {
     fontFamily: "'Playfair Display', serif",
     fontSize: "1.4rem", color: "#3d2c2c",
   },
-  emptyDesc: {
-    color: "#9e7676", fontFamily: "'Nunito', sans-serif",
-  },
+  emptyDesc: { color: "#9e7676", fontFamily: "'Nunito', sans-serif" },
   backBtn: {
     background: "rgba(255,255,255,0.85)",
     border: "1px solid rgba(255,182,193,0.4)",

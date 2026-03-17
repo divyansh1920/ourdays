@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { db} from "../firebase/config";
+import { db } from "../firebase/config";
 import { useAuth } from "../context/AuthContext";
 
 const MOODS = [
@@ -14,7 +14,7 @@ const MOODS = [
 ];
 
 const NewEntry = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, coupleId } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -34,7 +34,8 @@ const NewEntry = () => {
   const handleFileChange = (selectedFiles) => {
     const fileArray = Array.from(selectedFiles);
     const validFiles = fileArray.filter((f) => {
-      const isValid = f.type.startsWith("image/") ||
+      const isValid =
+        f.type.startsWith("image/") ||
         f.type.startsWith("video/") ||
         f.type.startsWith("audio/") ||
         f.type === "image/gif";
@@ -47,15 +48,24 @@ const NewEntry = () => {
       if (file.type.startsWith("image/") || file.type === "image/gif") {
         const reader = new FileReader();
         reader.onload = (e) => {
-          setPreviews((prev) => [...prev, { url: e.target.result, type: "image", name: file.name }]);
+          setPreviews((prev) => [
+            ...prev,
+            { url: e.target.result, type: "image", name: file.name },
+          ]);
         };
         reader.readAsDataURL(file);
       } else if (file.type.startsWith("video/")) {
-        setPreviews((prev) => [...prev, { url: null, type: "video", name: file.name }]);
+        setPreviews((prev) => [
+          ...prev,
+          { url: null, type: "video", name: file.name },
+        ]);
       } else if (file.type.startsWith("audio/")) {
         const reader = new FileReader();
         reader.onload = (e) => {
-          setPreviews((prev) => [...prev, { url: e.target.result, type: "audio", name: file.name }]);
+          setPreviews((prev) => [
+            ...prev,
+            { url: e.target.result, type: "audio", name: file.name },
+          ]);
         };
         reader.readAsDataURL(file);
       }
@@ -74,46 +84,46 @@ const NewEntry = () => {
   };
 
   const uploadFiles = async () => {
-  if (files.length === 0) return [];
-  const urls = [];
+    if (files.length === 0) return [];
+    const urls = [];
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append(
-      "upload_preset",
-      process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET
-    );
-    formData.append("folder", "ourdays");
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append(
+        "upload_preset",
+        process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET
+      );
+      formData.append("folder", "ourdays");
 
-    const resourceType = file.type.startsWith("video/")
-      ? "video"
-      : file.type.startsWith("audio/")
-      ? "video"
-      : "image";
+      const resourceType = file.type.startsWith("video/")
+        ? "video"
+        : file.type.startsWith("audio/")
+        ? "video"
+        : "image";
 
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
-      { method: "POST", body: formData }
-    );
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
+        { method: "POST", body: formData }
+      );
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (data.secure_url) {
-      urls.push({
-        url: data.secure_url,
-        type: file.type,
-        name: file.name,
-        publicId: data.public_id,
-      });
+      if (data.secure_url) {
+        urls.push({
+          url: data.secure_url,
+          type: file.type,
+          name: file.name,
+          publicId: data.public_id,
+        });
+      }
+
+      setUploadProgress(Math.round(((i + 1) / files.length) * 100));
     }
 
-    setUploadProgress(Math.round(((i + 1) / files.length) * 100));
-  }
-
-  return urls;
-};
+    return urls;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -132,6 +142,7 @@ const NewEntry = () => {
         text: text.trim(),
         mood: selectedMood,
         mediaUrls,
+        coupleId,
         authorId: currentUser.uid,
         authorName: currentUser.displayName || currentUser.email,
         createdAt: serverTimestamp(),
@@ -154,10 +165,18 @@ const NewEntry = () => {
         <div style={styles.successCard}>
           <div style={styles.successEmoji} className="pulse-soft">🌸</div>
           <h2 style={styles.successTitle}>Memory Saved!</h2>
-          <p style={styles.successText}>Your moment has been captured forever 💕</p>
+          <p style={styles.successText}>
+            Your moment has been captured forever 💕
+          </p>
           <div style={styles.successHearts}>
             {["💕", "🌸", "💝", "✨", "🌷"].map((h, i) => (
-              <span key={i} style={{ fontSize: "1.8rem", animationDelay: `${i * 0.2}s` }} className="float-animation">{h}</span>
+              <span
+                key={i}
+                style={{ fontSize: "1.8rem", animationDelay: `${i * 0.2}s` }}
+                className="float-animation"
+              >
+                {h}
+              </span>
             ))}
           </div>
         </div>
@@ -167,14 +186,15 @@ const NewEntry = () => {
 
   return (
     <div style={styles.page}>
-      {/* Background blobs */}
       <div style={styles.blob1} />
       <div style={styles.blob2} />
 
       <div style={styles.container}>
         {/* Header */}
         <div style={styles.header} className="fade-in-up">
-          <button style={styles.backBtn} onClick={() => navigate("/")}>← Back</button>
+          <button style={styles.backBtn} onClick={() => navigate("/")}>
+            ← Back
+          </button>
           <div style={styles.headerCenter}>
             <span style={{ fontSize: "2.5rem" }}>✍️</span>
             <h1 style={styles.pageTitle}>Today's Memory</h1>
@@ -184,9 +204,7 @@ const NewEntry = () => {
           </div>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} style={styles.form}>
-
           {/* Mood Selector */}
           <div style={styles.card}>
             <h3 style={styles.cardTitle}>How are you feeling? 🌈</h3>
@@ -199,7 +217,9 @@ const NewEntry = () => {
                     ...styles.moodBtn,
                     ...(selectedMood === mood.label ? styles.moodBtnActive : {}),
                   }}
-                  onClick={() => setSelectedMood(selectedMood === mood.label ? "" : mood.label)}
+                  onClick={() =>
+                    setSelectedMood(selectedMood === mood.label ? "" : mood.label)
+                  }
                 >
                   <span style={styles.moodEmoji}>{mood.emoji}</span>
                   <span style={styles.moodLabel}>{mood.label}</span>
@@ -220,7 +240,7 @@ const NewEntry = () => {
             />
           </div>
 
-          {/* Text Entry */}
+          {/* Text */}
           <div style={styles.card}>
             <h3 style={styles.cardTitle}>Write your heart out 💕</h3>
             <textarea
@@ -236,9 +256,10 @@ const NewEntry = () => {
           {/* Media Upload */}
           <div style={styles.card}>
             <h3 style={styles.cardTitle}>Add photos, videos or audio 📎</h3>
-            <p style={styles.cardSubtitle}>Images, GIFs, short videos, voice recordings — max 50MB each</p>
+            <p style={styles.cardSubtitle}>
+              Images, GIFs, short videos, voice recordings — max 50MB each
+            </p>
 
-            {/* Drop Zone */}
             <div
               style={{
                 ...styles.dropZone,
@@ -264,7 +285,6 @@ const NewEntry = () => {
               />
             </div>
 
-            {/* Previews */}
             {previews.length > 0 && (
               <div style={styles.previewGrid}>
                 {previews.map((preview, i) => (
@@ -273,8 +293,9 @@ const NewEntry = () => {
                       type="button"
                       style={styles.removeBtn}
                       onClick={() => removeFile(i)}
-                    >✕</button>
-
+                    >
+                      ✕
+                    </button>
                     {preview.type === "image" && (
                       <img
                         src={preview.url}
@@ -291,7 +312,11 @@ const NewEntry = () => {
                     {preview.type === "audio" && (
                       <div style={styles.previewAudio}>
                         <span style={{ fontSize: "1.5rem" }}>🎙️</span>
-                        <audio src={preview.url} controls style={{ width: "100%", marginTop: "8px" }} />
+                        <audio
+                          src={preview.url}
+                          controls
+                          style={{ width: "100%", marginTop: "8px" }}
+                        />
                       </div>
                     )}
                   </div>
@@ -300,24 +325,24 @@ const NewEntry = () => {
             )}
           </div>
 
-          {/* Upload Progress */}
+          {/* Progress */}
           {uploading && (
             <div style={styles.progressCard}>
               <p style={styles.progressText}>
-                {uploadProgress < 100 ? `Saving your memory... ${uploadProgress}% 🌸` : "Almost done! 💕"}
+                {uploadProgress < 100
+                  ? `Saving your memory... ${uploadProgress}% 🌸`
+                  : "Almost done! 💕"}
               </p>
               <div style={styles.progressBar}>
-                <div style={{ ...styles.progressFill, width: `${uploadProgress}%` }} />
+                <div
+                  style={{ ...styles.progressFill, width: `${uploadProgress}%` }}
+                />
               </div>
             </div>
           )}
 
-          {/* Error */}
-          {error && (
-            <div style={styles.errorBox}>⚠️ {error}</div>
-          )}
+          {error && <div style={styles.errorBox}>⚠️ {error}</div>}
 
-          {/* Submit */}
           <div style={styles.submitRow}>
             <button
               type="button"
@@ -334,7 +359,6 @@ const NewEntry = () => {
               {uploading ? "Saving... 🌸" : "Save This Memory 💝"}
             </button>
           </div>
-
         </form>
       </div>
     </div>
@@ -364,10 +388,9 @@ const styles = {
   header: { marginBottom: "36px" },
   backBtn: {
     background: "rgba(255,255,255,0.8)", border: "1px solid rgba(255,182,193,0.4)",
-    borderRadius: "12px", padding: "8px 16px",
-    fontSize: "0.9rem", fontWeight: "600", color: "#6b4f4f",
-    fontFamily: "'Nunito', sans-serif", cursor: "pointer",
-    marginBottom: "24px", display: "inline-block",
+    borderRadius: "12px", padding: "8px 16px", fontSize: "0.9rem",
+    fontWeight: "600", color: "#6b4f4f", fontFamily: "'Nunito', sans-serif",
+    cursor: "pointer", marginBottom: "24px", display: "inline-block",
   },
   headerCenter: { textAlign: "center" },
   pageTitle: {
@@ -417,25 +440,23 @@ const styles = {
     color: "#6b4f4f", fontFamily: "'Nunito', sans-serif",
   },
   titleInput: {
-    width: "100%", padding: "14px 18px",
-    borderRadius: "14px", border: "2px solid #ffe4e8",
-    fontSize: "1rem", fontFamily: "'Nunito', sans-serif",
-    background: "#fffdf7", color: "#3d2c2c",
-    outline: "none", marginTop: "10px",
+    width: "100%", padding: "14px 18px", borderRadius: "14px",
+    border: "2px solid #ffe4e8", fontSize: "1rem",
+    fontFamily: "'Nunito', sans-serif", background: "#fffdf7",
+    color: "#3d2c2c", outline: "none", marginTop: "10px",
     transition: "border-color 0.3s ease",
   },
   textarea: {
-    width: "100%", padding: "16px 18px",
-    borderRadius: "14px", border: "2px solid #ffe4e8",
-    fontSize: "0.95rem", fontFamily: "'Nunito', sans-serif",
-    background: "#fffdf7", color: "#3d2c2c",
-    outline: "none", resize: "vertical", lineHeight: "1.8",
-    marginTop: "10px", transition: "border-color 0.3s ease",
+    width: "100%", padding: "16px 18px", borderRadius: "14px",
+    border: "2px solid #ffe4e8", fontSize: "0.95rem",
+    fontFamily: "'Nunito', sans-serif", background: "#fffdf7",
+    color: "#3d2c2c", outline: "none", resize: "vertical",
+    lineHeight: "1.8", marginTop: "10px",
+    transition: "border-color 0.3s ease",
   },
   charCount: {
     textAlign: "right", fontSize: "0.78rem",
-    color: "#b48aff", fontFamily: "'Nunito', sans-serif",
-    marginTop: "8px",
+    color: "#b48aff", fontFamily: "'Nunito', sans-serif", marginTop: "8px",
   },
   dropZone: {
     border: "2px dashed #ffb3c1", borderRadius: "18px",
@@ -447,12 +468,11 @@ const styles = {
   },
   dropZoneActive: {
     border: "2px dashed #ff4d6d",
-    background: "#fff0f3",
-    transform: "scale(1.02)",
+    background: "#fff0f3", transform: "scale(1.02)",
   },
   dropText: {
-    fontFamily: "'Nunito', sans-serif", fontWeight: "700",
-    color: "#6b4f4f", fontSize: "1rem",
+    fontFamily: "'Nunito', sans-serif",
+    fontWeight: "700", color: "#6b4f4f", fontSize: "1rem",
   },
   dropSubtext: {
     fontSize: "0.82rem", color: "#9e7676",
@@ -465,16 +485,15 @@ const styles = {
   },
   previewItem: {
     position: "relative", borderRadius: "14px",
-    overflow: "hidden", border: "2px solid #ffe4e8",
-    background: "#fff8fa",
+    overflow: "hidden", border: "2px solid #ffe4e8", background: "#fff8fa",
   },
   removeBtn: {
     position: "absolute", top: "6px", right: "6px",
     width: "24px", height: "24px", borderRadius: "50%",
     background: "rgba(255,77,109,0.9)", border: "none",
     color: "white", fontSize: "0.7rem", fontWeight: "700",
-    cursor: "pointer", zIndex: 1, display: "flex",
-    alignItems: "center", justifyContent: "center",
+    cursor: "pointer", zIndex: 1,
+    display: "flex", alignItems: "center", justifyContent: "center",
   },
   previewImage: {
     width: "100%", height: "120px",
@@ -486,10 +505,9 @@ const styles = {
   },
   previewName: {
     fontSize: "0.75rem", color: "#6b4f4f",
-    fontFamily: "'Nunito', sans-serif",
-    padding: "0 8px", textAlign: "center",
-    overflow: "hidden", textOverflow: "ellipsis",
-    whiteSpace: "nowrap", width: "100%",
+    fontFamily: "'Nunito', sans-serif", padding: "0 8px",
+    textAlign: "center", overflow: "hidden",
+    textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%",
   },
   previewAudio: {
     padding: "12px", display: "flex",
@@ -527,8 +545,7 @@ const styles = {
     border: "1px solid rgba(255,182,193,0.5)",
     borderRadius: "14px", padding: "14px 28px",
     fontSize: "0.95rem", fontWeight: "600",
-    color: "#6b4f4f", fontFamily: "'Nunito', sans-serif",
-    cursor: "pointer",
+    color: "#6b4f4f", fontFamily: "'Nunito', sans-serif", cursor: "pointer",
   },
   submitBtn: {
     background: "linear-gradient(135deg, #ff85a1, #ff4d6d)",
@@ -544,9 +561,8 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "center",
   },
   successCard: {
-    background: "white", borderRadius: "32px",
-    padding: "60px 48px", textAlign: "center",
-    boxShadow: "0 20px 60px rgba(255,133,161,0.2)",
+    background: "white", borderRadius: "32px", padding: "60px 48px",
+    textAlign: "center", boxShadow: "0 20px 60px rgba(255,133,161,0.2)",
     border: "1px solid rgba(255,182,193,0.4)",
   },
   successEmoji: { fontSize: "4rem", display: "block", marginBottom: "20px" },

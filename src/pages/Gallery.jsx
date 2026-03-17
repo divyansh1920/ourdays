@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, where } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
 const MOODS = [
@@ -14,15 +15,20 @@ const MOODS = [
 
 const Gallery = () => {
   const navigate = useNavigate();
+  const { coupleId } = useAuth();
   const [allMedia, setAllMedia] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [lightbox, setLightbox] = useState(null);
-  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   useEffect(() => {
-    const q = query(collection(db, "entries"), orderBy("createdAt", "desc"));
+    if (!coupleId) return;
+    const q = query(
+      collection(db, "entries"),
+      where("coupleId", "==", coupleId),
+      orderBy("createdAt", "desc")
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const media = [];
       snapshot.docs.forEach((doc) => {
@@ -46,32 +52,31 @@ const Gallery = () => {
       setLoading(false);
     });
     return unsubscribe;
-  }, []);
+  }, [coupleId]);
 
   useEffect(() => {
     if (filter === "all") setFiltered(allMedia);
-    else if (filter === "photos") setFiltered(allMedia.filter(m => m.type?.startsWith("image/")));
-    else if (filter === "videos") setFiltered(allMedia.filter(m => m.type?.startsWith("video/")));
-    else if (filter === "audio") setFiltered(allMedia.filter(m => m.type?.startsWith("audio/")));
+    else if (filter === "photos")
+      setFiltered(allMedia.filter((m) => m.type?.startsWith("image/")));
+    else if (filter === "videos")
+      setFiltered(allMedia.filter((m) => m.type?.startsWith("video/")));
+    else if (filter === "audio")
+      setFiltered(allMedia.filter((m) => m.type?.startsWith("audio/")));
   }, [filter, allMedia]);
 
-  const openLightbox = (item, index) => {
-    setLightbox(item);
-    setLightboxIndex(index);
-  };
-
+  const openLightbox = (item) => setLightbox(item);
   const closeLightbox = () => setLightbox(null);
 
   const prevItem = () => {
-    const imageItems = filtered.filter(m => m.type?.startsWith("image/"));
-    const currentIndex = imageItems.findIndex(m => m.url === lightbox.url);
+    const imageItems = filtered.filter((m) => m.type?.startsWith("image/"));
+    const currentIndex = imageItems.findIndex((m) => m.url === lightbox.url);
     const prev = imageItems[(currentIndex - 1 + imageItems.length) % imageItems.length];
     setLightbox(prev);
   };
 
   const nextItem = () => {
-    const imageItems = filtered.filter(m => m.type?.startsWith("image/"));
-    const currentIndex = imageItems.findIndex(m => m.url === lightbox.url);
+    const imageItems = filtered.filter((m) => m.type?.startsWith("image/"));
+    const currentIndex = imageItems.findIndex((m) => m.url === lightbox.url);
     const next = imageItems[(currentIndex + 1) % imageItems.length];
     setLightbox(next);
   };
@@ -84,9 +89,9 @@ const Gallery = () => {
     });
   };
 
-  const photoCount = allMedia.filter(m => m.type?.startsWith("image/")).length;
-  const videoCount = allMedia.filter(m => m.type?.startsWith("video/")).length;
-  const audioCount = allMedia.filter(m => m.type?.startsWith("audio/")).length;
+  const photoCount = allMedia.filter((m) => m.type?.startsWith("image/")).length;
+  const videoCount = allMedia.filter((m) => m.type?.startsWith("video/")).length;
+  const audioCount = allMedia.filter((m) => m.type?.startsWith("audio/")).length;
 
   return (
     <div style={styles.page}>
@@ -168,88 +173,98 @@ const Gallery = () => {
         ) : (
           <>
             {/* Photos & Videos Grid */}
-            {(filter === "all" || filter === "photos" || filter === "videos") && (
-              <div style={styles.section}>
-                {filter === "all" && (
-                  <h2 style={styles.sectionTitle}>📸 Photos & Videos</h2>
-                )}
-                <div style={styles.photoGrid}>
-                  {filtered
-                    .filter(m => m.type?.startsWith("image/") || m.type?.startsWith("video/"))
-                    .map((item, i) => (
-                      <div
-                        key={i}
-                        style={styles.photoItem}
-                        onClick={() => item.type?.startsWith("image/") && openLightbox(item, i)}
-                        className="fade-in-up"
-                      >
-                        {item.type?.startsWith("image/") ? (
-                          <>
-                            <img
-                              src={item.url}
-                              alt={item.name || "memory"}
-                              style={styles.photo}
-                            />
-                            <div style={styles.photoOverlay}>
-                              <span style={styles.photoOverlayIcon}>🔍</span>
-                              {item.entryDate && (
-                                <span style={styles.photoDate}>{formatDate(item.entryDate)}</span>
-                              )}
+            {(filter === "all" || filter === "photos" || filter === "videos") &&
+              filtered.filter(
+                (m) => m.type?.startsWith("image/") || m.type?.startsWith("video/")
+              ).length > 0 && (
+                <div style={styles.section}>
+                  {filter === "all" && (
+                    <h2 style={styles.sectionTitle}>📸 Photos & Videos</h2>
+                  )}
+                  <div style={styles.photoGrid}>
+                    {filtered
+                      .filter(
+                        (m) =>
+                          m.type?.startsWith("image/") ||
+                          m.type?.startsWith("video/")
+                      )
+                      .map((item, i) => (
+                        <div
+                          key={i}
+                          style={styles.photoItem}
+                          onClick={() =>
+                            item.type?.startsWith("image/") && openLightbox(item)
+                          }
+                          className="fade-in-up"
+                        >
+                          {item.type?.startsWith("image/") ? (
+                            <>
+                              <img
+                                src={item.url}
+                                alt={item.name || "memory"}
+                                style={styles.photo}
+                              />
+                              <div style={styles.photoOverlay}>
+                                <span style={styles.photoOverlayIcon}>🔍</span>
+                                {item.entryDate && (
+                                  <span style={styles.photoDate}>
+                                    {formatDate(item.entryDate)}
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          ) : (
+                            <div style={styles.videoThumb}>
+                              <video src={item.url} style={styles.photo} />
+                              <div style={styles.videoOverlay}>
+                                <span style={styles.playIcon}>▶</span>
+                              </div>
                             </div>
-                          </>
-                        ) : (
-                          <div style={styles.videoThumb}>
-                            <video src={item.url} style={styles.photo} />
-                            <div style={styles.videoOverlay}>
-                              <span style={styles.playIcon}>▶</span>
-                            </div>
+                          )}
+                          <div style={styles.authorBadge}>
+                            {MOODS.find((m) => m.label === item.mood)?.emoji || "💕"}
                           </div>
-                        )}
-
-                        {/* Author badge */}
-                        <div style={styles.authorBadge}>
-                          {MOODS.find(m => m.label === item.mood)?.emoji || "💕"}
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
             {/* Audio Section */}
             {(filter === "all" || filter === "audio") &&
-              filtered.filter(m => m.type?.startsWith("audio/")).length > 0 && (
-              <div style={styles.section}>
-                <h2 style={styles.sectionTitle}>🎙️ Voice Memories</h2>
-                <div style={styles.audioList}>
-                  {filtered
-                    .filter(m => m.type?.startsWith("audio/"))
-                    .map((item, i) => (
-                      <div key={i} style={styles.audioCard} className="fade-in-up">
-                        <div style={styles.audioCardLeft}>
-                          <div style={styles.audioIcon}>🎵</div>
-                          <div>
-                            <p style={styles.audioName}>{item.name || "Voice recording"}</p>
-                            <p style={styles.audioMeta}>
-                              by {item.authorName} •{" "}
-                              {item.entryDate ? formatDate(item.entryDate) : ""}
-                            </p>
+              filtered.filter((m) => m.type?.startsWith("audio/")).length > 0 && (
+                <div style={styles.section}>
+                  <h2 style={styles.sectionTitle}>🎙️ Voice Memories</h2>
+                  <div style={styles.audioList}>
+                    {filtered
+                      .filter((m) => m.type?.startsWith("audio/"))
+                      .map((item, i) => (
+                        <div key={i} style={styles.audioCard} className="fade-in-up">
+                          <div style={styles.audioCardLeft}>
+                            <div style={styles.audioIcon}>🎵</div>
+                            <div>
+                              <p style={styles.audioName}>
+                                {item.name || "Voice recording"}
+                              </p>
+                              <p style={styles.audioMeta}>
+                                by {item.authorName} •{" "}
+                                {item.entryDate ? formatDate(item.entryDate) : ""}
+                              </p>
+                            </div>
                           </div>
+                          <audio
+                            src={item.url}
+                            controls
+                            style={styles.audioPlayer}
+                          />
                         </div>
-                        <audio
-                          src={item.url}
-                          controls
-                          style={styles.audioPlayer}
-                        />
-                      </div>
-                    ))}
+                      ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </>
         )}
 
-        {/* Add media button */}
         {!loading && allMedia.length > 0 && (
           <div style={{ textAlign: "center", marginTop: "32px" }}>
             <button style={styles.addBtn} onClick={() => navigate("/new-entry")}>
@@ -262,37 +277,50 @@ const Gallery = () => {
       {/* Lightbox */}
       {lightbox && (
         <div style={styles.lightboxOverlay} onClick={closeLightbox}>
-          <div style={styles.lightboxContent} onClick={(e) => e.stopPropagation()}>
-            {/* Close */}
-            <button style={styles.lightboxClose} onClick={closeLightbox}>✕</button>
-
-            {/* Navigation */}
-            <button style={{ ...styles.lightboxNav, left: "16px" }} onClick={prevItem}>‹</button>
-            <button style={{ ...styles.lightboxNav, right: "16px" }} onClick={nextItem}>›</button>
-
-            {/* Image */}
+          <div
+            style={styles.lightboxContent}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button style={styles.lightboxClose} onClick={closeLightbox}>
+              ✕
+            </button>
+            <button
+              style={{ ...styles.lightboxNav, left: "16px" }}
+              onClick={prevItem}
+            >
+              ‹
+            </button>
+            <button
+              style={{ ...styles.lightboxNav, right: "16px" }}
+              onClick={nextItem}
+            >
+              ›
+            </button>
             <img
               src={lightbox.url}
               alt={lightbox.name}
               style={styles.lightboxImage}
             />
-
-            {/* Info */}
             <div style={styles.lightboxInfo}>
               {lightbox.entryTitle && (
                 <p style={styles.lightboxTitle}>{lightbox.entryTitle}</p>
               )}
               <div style={styles.lightboxMeta}>
                 {lightbox.mood && (
-                  <span style={styles.lightboxMood}>
-                    {MOODS.find(m => m.label === lightbox.mood)?.emoji} {lightbox.mood}
+                  <span style={styles.lightboxBadge}>
+                    {MOODS.find((m) => m.label === lightbox.mood)?.emoji}{" "}
+                    {lightbox.mood}
                   </span>
                 )}
                 {lightbox.entryDate && (
-                  <span style={styles.lightboxDate}>📅 {formatDate(lightbox.entryDate)}</span>
+                  <span style={styles.lightboxBadge}>
+                    📅 {formatDate(lightbox.entryDate)}
+                  </span>
                 )}
                 {lightbox.authorName && (
-                  <span style={styles.lightboxAuthor}>💕 {lightbox.authorName}</span>
+                  <span style={styles.lightboxBadge}>
+                    💕 {lightbox.authorName}
+                  </span>
                 )}
               </div>
             </div>
@@ -365,15 +393,15 @@ const styles = {
     fontFamily: "'Nunito', sans-serif", fontWeight: "600",
   },
   filterRow: {
-    display: "flex", gap: "10px", flexWrap: "wrap",
-    marginBottom: "28px",
+    display: "flex", gap: "10px",
+    flexWrap: "wrap", marginBottom: "28px",
   },
   filterBtn: {
     padding: "10px 20px", borderRadius: "14px",
     border: "1px solid rgba(255,182,193,0.4)",
-    background: "rgba(255,255,255,0.8)",
-    fontSize: "0.88rem", fontWeight: "600",
-    color: "#6b4f4f", fontFamily: "'Nunito', sans-serif",
+    background: "rgba(255,255,255,0.8)", fontSize: "0.88rem",
+    fontWeight: "600", color: "#6b4f4f",
+    fontFamily: "'Nunito', sans-serif",
     cursor: "pointer", transition: "all 0.25s ease",
   },
   filterBtnActive: {
@@ -384,8 +412,7 @@ const styles = {
   section: { marginBottom: "40px" },
   sectionTitle: {
     fontFamily: "'Playfair Display', serif",
-    fontSize: "1.5rem", color: "#3d2c2c",
-    marginBottom: "16px",
+    fontSize: "1.5rem", color: "#3d2c2c", marginBottom: "16px",
   },
   photoGrid: {
     display: "grid",
@@ -394,8 +421,7 @@ const styles = {
   },
   photoItem: {
     position: "relative", borderRadius: "18px",
-    overflow: "hidden", aspectRatio: "1",
-    cursor: "pointer",
+    overflow: "hidden", aspectRatio: "1", cursor: "pointer",
     boxShadow: "0 4px 20px rgba(180,120,140,0.15)",
     border: "2px solid rgba(255,182,193,0.3)",
     transition: "all 0.3s ease",
@@ -410,15 +436,13 @@ const styles = {
     background: "linear-gradient(to top, rgba(61,44,44,0.6) 0%, transparent 60%)",
     opacity: 0, transition: "opacity 0.3s ease",
     display: "flex", flexDirection: "column",
-    alignItems: "center", justifyContent: "center",
-    gap: "8px",
+    alignItems: "center", justifyContent: "center", gap: "8px",
   },
   photoOverlayIcon: { fontSize: "2rem" },
   photoDate: {
     fontSize: "0.75rem", color: "white",
-    fontFamily: "'Nunito', sans-serif",
-    fontWeight: "600", position: "absolute",
-    bottom: "10px", left: "10px",
+    fontFamily: "'Nunito', sans-serif", fontWeight: "600",
+    position: "absolute", bottom: "10px", left: "10px",
   },
   videoThumb: { position: "relative", width: "100%", height: "100%" },
   videoOverlay: {
@@ -446,15 +470,14 @@ const styles = {
     border: "1px solid rgba(255,182,193,0.3)",
     boxShadow: "0 4px 20px rgba(180,120,140,0.1)",
     display: "flex", alignItems: "center",
-    justifyContent: "space-between", gap: "20px",
-    flexWrap: "wrap",
+    justifyContent: "space-between", gap: "20px", flexWrap: "wrap",
   },
   audioCardLeft: { display: "flex", alignItems: "center", gap: "14px" },
   audioIcon: {
     width: "48px", height: "48px", borderRadius: "50%",
     background: "linear-gradient(135deg, #ffe4e8, #ede0ff)",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    fontSize: "1.4rem", flexShrink: 0,
+    display: "flex", alignItems: "center",
+    justifyContent: "center", fontSize: "1.4rem", flexShrink: 0,
   },
   audioName: {
     fontWeight: "700", color: "#3d2c2c",
@@ -477,8 +500,7 @@ const styles = {
     fontSize: "1.5rem", color: "#3d2c2c",
   },
   emptyDesc: {
-    color: "#9e7676", fontFamily: "'Nunito', sans-serif",
-    maxWidth: "300px",
+    color: "#9e7676", fontFamily: "'Nunito', sans-serif", maxWidth: "300px",
   },
   addBtn: {
     background: "linear-gradient(135deg, #ff85a1, #ff4d6d)",
@@ -506,8 +528,7 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "center",
   },
   lightboxNav: {
-    position: "absolute", top: "50%",
-    transform: "translateY(-50%)",
+    position: "absolute", top: "50%", transform: "translateY(-50%)",
     background: "rgba(255,255,255,0.15)", border: "none",
     borderRadius: "50%", width: "48px", height: "48px",
     color: "white", fontSize: "1.8rem", cursor: "pointer",
@@ -519,37 +540,20 @@ const styles = {
     borderRadius: "20px", objectFit: "contain",
     boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
   },
-  lightboxInfo: {
-    marginTop: "20px", textAlign: "center",
-  },
+  lightboxInfo: { marginTop: "20px", textAlign: "center" },
   lightboxTitle: {
     fontFamily: "'Playfair Display', serif",
     fontSize: "1.3rem", color: "white", marginBottom: "10px",
   },
-  lightboxMeta: { display: "flex", gap: "14px", flexWrap: "wrap", justifyContent: "center" },
-  lightboxMood: {
-    background: "rgba(255,255,255,0.15)", borderRadius: "20px",
-    padding: "6px 14px", fontSize: "0.85rem",
-    color: "white", fontFamily: "'Nunito', sans-serif",
+  lightboxMeta: {
+    display: "flex", gap: "14px",
+    flexWrap: "wrap", justifyContent: "center",
   },
-  lightboxDate: {
-    background: "rgba(255,255,255,0.15)", borderRadius: "20px",
-    padding: "6px 14px", fontSize: "0.85rem",
-    color: "white", fontFamily: "'Nunito', sans-serif",
-  },
-  lightboxAuthor: {
+  lightboxBadge: {
     background: "rgba(255,255,255,0.15)", borderRadius: "20px",
     padding: "6px 14px", fontSize: "0.85rem",
     color: "white", fontFamily: "'Nunito', sans-serif",
   },
 };
-
-// Add hover effects
-const styleTag = document.createElement("style");
-styleTag.innerHTML = `
-  .photo-item:hover .photo { transform: scale(1.05); }
-  .photo-item:hover .photo-overlay { opacity: 1 !important; }
-`;
-document.head.appendChild(styleTag);
 
 export default Gallery;

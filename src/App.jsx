@@ -1,74 +1,51 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
-// Pages
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import CalendarPage from "./pages/CalendarPage";
 import NewEntry from "./pages/NewEntry";
 import Gallery from "./pages/Gallery";
 import VoiceMemories from "./pages/VoiceMemories";
-
-// Components
+import LinkPartner from "./pages/LinkPartner";
 import Navbar from "./components/Navbar";
 import FloatingHearts from "./components/FloatingHearts";
 
-// Protected Route wrapper
 const ProtectedRoute = ({ children }) => {
   const { currentUser } = useAuth();
   return currentUser ? children : <Navigate to="/login" />;
 };
 
+const CoupleRoute = ({ children }) => {
+  const { currentUser, coupleId } = useAuth();
+  if (!currentUser) return <Navigate to="/login" />;
+  if (!coupleId) return <Navigate to="/link-partner" />;
+  return children;
+};
+
 const AppContent = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, coupleId } = useAuth();
 
   return (
     <>
-      {currentUser && <FloatingHearts />}
-      {currentUser && <Navbar />}
+      {currentUser && coupleId && <FloatingHearts />}
+      {currentUser && coupleId && <Navbar />}
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
-          path="/"
+          path="/link-partner"
           element={
             <ProtectedRoute>
-              <Home />
+              <LinkPartner />
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/calendar"
-          element={
-            <ProtectedRoute>
-              <CalendarPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/new-entry"
-          element={
-            <ProtectedRoute>
-              <NewEntry />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/gallery"
-          element={
-            <ProtectedRoute>
-              <Gallery />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/voice-memories"
-          element={
-            <ProtectedRoute>
-              <VoiceMemories />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/" element={<CoupleRoute><Home /></CoupleRoute>} />
+        <Route path="/calendar" element={<CoupleRoute><CalendarPage /></CoupleRoute>} />
+        <Route path="/new-entry" element={<CoupleRoute><NewEntry /></CoupleRoute>} />
+        <Route path="/gallery" element={<CoupleRoute><Gallery /></CoupleRoute>} />
+        <Route path="/voice-memories" element={<CoupleRoute><VoiceMemories /></CoupleRoute>} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </>

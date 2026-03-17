@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection, query, orderBy, limit,
+  onSnapshot, addDoc, serverTimestamp, where
+} from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../context/AuthContext";
 
@@ -14,7 +17,7 @@ const MOODS = [
 ];
 
 const Home = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, coupleId } = useAuth();
   const navigate = useNavigate();
   const [recentEntries, setRecentEntries] = useState([]);
   const [memoryCount, setMemoryCount] = useState(0);
@@ -26,23 +29,34 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, "entries"), orderBy("createdAt", "desc"), limit(3));
+    if (!coupleId) return;
+    const q = query(
+      collection(db, "entries"),
+      where("coupleId", "==", coupleId),
+      orderBy("createdAt", "desc"),
+      limit(3)
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const entries = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setRecentEntries(entries);
       setLoading(false);
     });
     return unsubscribe;
-  }, []);
+  }, [coupleId]);
 
   useEffect(() => {
-    const q = query(collection(db, "entries"), orderBy("createdAt", "desc"));
+    if (!coupleId) return;
+    const q = query(
+      collection(db, "entries"),
+      where("coupleId", "==", coupleId),
+      orderBy("createdAt", "desc")
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setMemoryCount(snapshot.size);
       setAllEntries(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
     });
     return unsubscribe;
-  }, []);
+  }, [coupleId]);
 
   const sendHeart = async () => {
     if (heartSent) return;
@@ -50,6 +64,7 @@ const Home = () => {
     setHeartSent(true);
     await addDoc(collection(db, "hearts"), {
       from: currentUser.displayName || currentUser.email,
+      coupleId,
       sentAt: serverTimestamp(),
     });
     setTimeout(() => setShowHeartAnim(false), 3000);
@@ -83,11 +98,9 @@ const Home = () => {
 
   return (
     <div style={styles.page}>
-      {/* Hero Section */}
       <section style={styles.hero}>
         <div style={styles.heroBlob1} />
         <div style={styles.heroBlob2} />
-
         <div style={styles.heroContent}>
           <p style={styles.greetingText}>
             {emoji} {greeting}, {currentUser?.displayName?.split(" ")[0] || "Love"} 💕
@@ -96,14 +109,10 @@ const Home = () => {
           <p style={styles.heroSubtitle} className="text-script">
             "Every moment we share becomes a memory we treasure forever"
           </p>
-
-          {/* Memory Counter */}
           <div style={styles.counterBadge} className="pulse-soft">
             <span style={styles.counterNumber}>{memoryCount}</span>
             <span style={styles.counterLabel}>memories created together 💝</span>
           </div>
-
-          {/* CTA Buttons */}
           <div style={styles.heroBtns}>
             <button style={styles.primaryBtn} onClick={() => navigate("/new-entry")}>
               ✍️ Write Today's Entry
@@ -113,26 +122,18 @@ const Home = () => {
             </button>
           </div>
         </div>
-
-        {/* Decorative floating elements */}
         <div style={{ ...styles.floatEl, top: "15%", right: "8%", fontSize: "3rem" }} className="float-animation">🌸</div>
         <div style={{ ...styles.floatEl, bottom: "20%", right: "5%", fontSize: "2rem", animationDelay: "1s" }} className="float-animation">💕</div>
         <div style={{ ...styles.floatEl, top: "30%", left: "3%", fontSize: "2.5rem", animationDelay: "2s" }} className="float-animation">🌷</div>
       </section>
 
       <div style={styles.content}>
-
-        {/* Quick Actions Row */}
         <section style={styles.quickActions}>
-          {/* Miss You Button */}
           <div style={styles.actionCard}>
             <h3 style={styles.actionTitle}>Thinking of you? 💭</h3>
             <p style={styles.actionDesc}>Send a little heart their way</p>
             <button
-              style={{
-                ...styles.heartBtn,
-                ...(heartSent ? styles.heartBtnSent : {}),
-              }}
+              style={{ ...styles.heartBtn, ...(heartSent ? styles.heartBtnSent : {}) }}
               onClick={sendHeart}
             >
               {heartSent ? "💝 Heart Sent!" : "💗 I Miss You"}
@@ -148,7 +149,6 @@ const Home = () => {
             )}
           </div>
 
-          {/* Random Memory */}
           <div style={styles.actionCard}>
             <h3 style={styles.actionTitle}>Surprise me! 🎲</h3>
             <p style={styles.actionDesc}>Revisit a random memory together</p>
@@ -157,7 +157,6 @@ const Home = () => {
             </button>
           </div>
 
-          {/* Today's mood */}
           <div style={styles.actionCard}>
             <h3 style={styles.actionTitle}>How are you feeling? 🌈</h3>
             <p style={styles.actionDesc}>Share your mood right now</p>
@@ -176,7 +175,6 @@ const Home = () => {
           </div>
         </section>
 
-        {/* Recent Entries */}
         <section style={styles.section}>
           <div style={styles.sectionHeader}>
             <h2 style={styles.sectionTitle}>Recent Memories 🌸</h2>
@@ -216,21 +214,15 @@ const Home = () => {
                       <p style={styles.entryDate}>{formatDate(entry.createdAt)}</p>
                     </div>
                   </div>
-
                   {entry.title && <h3 style={styles.entryTitle}>{entry.title}</h3>}
-
                   <p style={styles.entryText}>
-                    {entry.text?.length > 180
-                      ? entry.text.substring(0, 180) + "..."
-                      : entry.text}
+                    {entry.text?.length > 180 ? entry.text.substring(0, 180) + "..." : entry.text}
                   </p>
-
                   {entry.mood && (
                     <div style={styles.moodTag}>
                       {MOODS.find((m) => m.label === entry.mood)?.emoji} {entry.mood}
                     </div>
                   )}
-
                   {entry.mediaUrls?.length > 0 && (
                     <div style={styles.mediaPreview}>
                       <span style={styles.mediaCount}>
@@ -244,7 +236,6 @@ const Home = () => {
           )}
         </section>
 
-        {/* Bottom Nav Cards */}
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Explore 💝</h2>
           <div style={styles.navCards}>
@@ -266,10 +257,8 @@ const Home = () => {
             ))}
           </div>
         </section>
-
       </div>
 
-      {/* Random Memory Modal */}
       {showRandom && randomMemory && (
         <div style={styles.modalOverlay} onClick={() => setShowRandom(false)}>
           <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -308,10 +297,8 @@ const styles = {
     background: "linear-gradient(135deg, #fff0f3 0%, #f5f0ff 50%, #fdf6e3 100%)",
   },
   hero: {
-    position: "relative",
-    padding: "80px 24px 60px",
-    textAlign: "center",
-    overflow: "hidden",
+    position: "relative", padding: "80px 24px 60px",
+    textAlign: "center", overflow: "hidden",
   },
   heroBlob1: {
     position: "absolute", width: "600px", height: "600px", borderRadius: "50%",
@@ -325,8 +312,8 @@ const styles = {
   },
   heroContent: { position: "relative", zIndex: 1, maxWidth: "700px", margin: "0 auto" },
   greetingText: {
-    fontSize: "1.1rem", color: "#9e7676", fontFamily: "'Nunito', sans-serif",
-    marginBottom: "12px", fontWeight: "600",
+    fontSize: "1.1rem", color: "#9e7676",
+    fontFamily: "'Nunito', sans-serif", marginBottom: "12px", fontWeight: "600",
   },
   heroTitle: {
     fontFamily: "'Dancing Script', cursive",
@@ -362,15 +349,14 @@ const styles = {
     color: "white", border: "none", borderRadius: "16px",
     padding: "14px 28px", fontSize: "1rem", fontWeight: "700",
     fontFamily: "'Nunito', sans-serif", cursor: "pointer",
-    boxShadow: "0 8px 24px rgba(255,77,109,0.3)",
-    transition: "all 0.3s ease",
+    boxShadow: "0 8px 24px rgba(255,77,109,0.3)", transition: "all 0.3s ease",
   },
   secondaryBtn: {
     background: "rgba(255,255,255,0.8)", backdropFilter: "blur(12px)",
     color: "#6b4f4f", border: "1px solid rgba(255,182,193,0.5)",
     borderRadius: "16px", padding: "14px 28px", fontSize: "1rem",
-    fontWeight: "700", fontFamily: "'Nunito', sans-serif", cursor: "pointer",
-    transition: "all 0.3s ease",
+    fontWeight: "700", fontFamily: "'Nunito', sans-serif",
+    cursor: "pointer", transition: "all 0.3s ease",
   },
   floatEl: { position: "absolute", pointerEvents: "none", zIndex: 0 },
   content: { maxWidth: "1100px", margin: "0 auto", padding: "0 24px 60px" },
@@ -386,8 +372,8 @@ const styles = {
     position: "relative", overflow: "hidden",
   },
   actionTitle: {
-    fontFamily: "'Playfair Display', serif", fontSize: "1.2rem",
-    color: "#3d2c2c", marginBottom: "6px",
+    fontFamily: "'Playfair Display', serif",
+    fontSize: "1.2rem", color: "#3d2c2c", marginBottom: "6px",
   },
   actionDesc: {
     fontSize: "0.88rem", color: "#9e7676",
@@ -412,8 +398,6 @@ const styles = {
   burstHeart: {
     position: "absolute", fontSize: "1.5rem",
     animation: "burstOut 1s ease forwards",
-    "--tx": `${(Math.random() - 0.5) * 100}px`,
-    "--ty": `${(Math.random() - 0.5) * 100}px`,
   },
   randomBtn: {
     background: "linear-gradient(135deg, #c4a7ff, #9b5de5)",
@@ -425,12 +409,16 @@ const styles = {
   },
   moodRow: { display: "flex", gap: "10px", flexWrap: "wrap" },
   moodBtn: {
-    fontSize: "1.6rem", background: "#fff0f3", border: "2px solid #ffe4e8",
-    borderRadius: "12px", padding: "8px 10px", cursor: "pointer",
+    fontSize: "1.6rem", background: "#fff0f3",
+    border: "2px solid #ffe4e8", borderRadius: "12px",
+    padding: "8px 10px", cursor: "pointer",
     transition: "all 0.2s ease", lineHeight: 1,
   },
   section: { marginBottom: "48px" },
-  sectionHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" },
+  sectionHeader: {
+    display: "flex", justifyContent: "space-between",
+    alignItems: "center", marginBottom: "20px",
+  },
   sectionTitle: {
     fontFamily: "'Playfair Display', serif",
     fontSize: "1.8rem", color: "#3d2c2c",
@@ -440,7 +428,11 @@ const styles = {
     fontSize: "0.95rem", fontWeight: "700",
     fontFamily: "'Nunito', sans-serif", cursor: "pointer",
   },
-  entriesGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" },
+  entriesGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+    gap: "20px",
+  },
   entryCard: {
     background: "rgba(255,255,255,0.9)", backdropFilter: "blur(16px)",
     borderRadius: "24px", padding: "28px",
@@ -455,16 +447,19 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "center",
     fontSize: "1.4rem", flexShrink: 0,
   },
-  entryAuthor: { fontWeight: "700", color: "#3d2c2c", fontFamily: "'Nunito', sans-serif", fontSize: "0.95rem" },
+  entryAuthor: {
+    fontWeight: "700", color: "#3d2c2c",
+    fontFamily: "'Nunito', sans-serif", fontSize: "0.95rem",
+  },
   entryDate: { fontSize: "0.8rem", color: "#9e7676", fontFamily: "'Nunito', sans-serif" },
   entryTitle: {
-    fontFamily: "'Playfair Display', serif", fontSize: "1.15rem",
-    color: "#3d2c2c", marginBottom: "10px",
+    fontFamily: "'Playfair Display', serif",
+    fontSize: "1.15rem", color: "#3d2c2c", marginBottom: "10px",
   },
   entryText: {
     fontSize: "0.92rem", color: "#6b4f4f",
-    fontFamily: "'Nunito', sans-serif", lineHeight: "1.7",
-    marginBottom: "14px",
+    fontFamily: "'Nunito', sans-serif",
+    lineHeight: "1.7", marginBottom: "14px",
   },
   moodTag: {
     display: "inline-flex", alignItems: "center", gap: "6px",
@@ -481,9 +476,16 @@ const styles = {
     border: "1px dashed rgba(255,182,193,0.5)",
     display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
   },
-  emptyTitle: { fontFamily: "'Playfair Display', serif", fontSize: "1.4rem", color: "#3d2c2c" },
+  emptyTitle: {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: "1.4rem", color: "#3d2c2c",
+  },
   emptyDesc: { color: "#9e7676", fontFamily: "'Nunito', sans-serif" },
-  navCards: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" },
+  navCards: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "16px",
+  },
   navCard: {
     borderRadius: "20px", padding: "28px 24px", cursor: "pointer",
     border: "1px solid rgba(255,255,255,0.8)",
@@ -491,7 +493,10 @@ const styles = {
     transition: "all 0.3s ease",
   },
   navCardIcon: { fontSize: "2.5rem", display: "block", marginBottom: "12px" },
-  navCardTitle: { fontFamily: "'Playfair Display', serif", fontSize: "1.2rem", color: "#3d2c2c", marginBottom: "6px" },
+  navCardTitle: {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: "1.2rem", color: "#3d2c2c", marginBottom: "6px",
+  },
   navCardDesc: { fontSize: "0.85rem", color: "#9e7676", fontFamily: "'Nunito', sans-serif" },
   modalOverlay: {
     position: "fixed", inset: 0,
@@ -512,12 +517,29 @@ const styles = {
     cursor: "pointer", color: "#6b4f4f", fontWeight: "700",
   },
   modalHeader: { textAlign: "center", marginBottom: "20px" },
-  modalTitle: { fontFamily: "'Playfair Display', serif", fontSize: "1.6rem", color: "#3d2c2c", margin: "8px 0 4px" },
+  modalTitle: {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: "1.6rem", color: "#3d2c2c", margin: "8px 0 4px",
+  },
   modalDate: { fontSize: "0.85rem", color: "#9e7676", fontFamily: "'Nunito', sans-serif" },
-  divider: { height: "1px", background: "linear-gradient(90deg, transparent, #ffb3c1, transparent)", margin: "16px 0" },
-  modalEntryTitle: { fontFamily: "'Playfair Display', serif", fontSize: "1.2rem", color: "#3d2c2c", marginBottom: "12px" },
-  modalText: { fontSize: "0.95rem", color: "#6b4f4f", fontFamily: "'Nunito', sans-serif", lineHeight: "1.8", marginBottom: "16px" },
-  modalAuthor: { textAlign: "right", fontFamily: "'Dancing Script', cursive", fontSize: "1.1rem", color: "#b48aff" },
+  divider: {
+    height: "1px",
+    background: "linear-gradient(90deg, transparent, #ffb3c1, transparent)",
+    margin: "16px 0",
+  },
+  modalEntryTitle: {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: "1.2rem", color: "#3d2c2c", marginBottom: "12px",
+  },
+  modalText: {
+    fontSize: "0.95rem", color: "#6b4f4f",
+    fontFamily: "'Nunito', sans-serif",
+    lineHeight: "1.8", marginBottom: "16px",
+  },
+  modalAuthor: {
+    textAlign: "right", fontFamily: "'Dancing Script', cursive",
+    fontSize: "1.1rem", color: "#b48aff",
+  },
 };
 
 export default Home;

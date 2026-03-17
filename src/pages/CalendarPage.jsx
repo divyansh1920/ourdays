@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import {
+  collection, query, orderBy, onSnapshot, where
+} from "firebase/firestore";
 import { db } from "../firebase/config";
+import { useAuth } from "../context/AuthContext";
 
 const MOODS = [
   { emoji: "😊", label: "Happy" },
@@ -21,6 +24,7 @@ const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 const CalendarPage = () => {
   const navigate = useNavigate();
+  const { coupleId } = useAuth();
   const [entries, setEntries] = useState([]);
   const [entryMap, setEntryMap] = useState({});
   const [today] = useState(new Date());
@@ -32,19 +36,23 @@ const CalendarPage = () => {
   const [expandedEntry, setExpandedEntry] = useState(null);
 
   useEffect(() => {
-    const q = query(collection(db, "entries"), orderBy("createdAt", "desc"));
+    if (!coupleId) return;
+    const q = query(
+      collection(db, "entries"),
+      where("coupleId", "==", coupleId),
+      orderBy("createdAt", "desc")
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setEntries(data);
 
-      // Build a map: "YYYY-MM-DD" -> [entries]
       const map = {};
       data.forEach((entry) => {
-        const dateKey = entry.date || (
-          entry.createdAt?.toDate
+        const dateKey =
+          entry.date ||
+          (entry.createdAt?.toDate
             ? entry.createdAt.toDate().toISOString().split("T")[0]
-            : null
-        );
+            : null);
         if (dateKey) {
           if (!map[dateKey]) map[dateKey] = [];
           map[dateKey].push(entry);
@@ -53,13 +61,15 @@ const CalendarPage = () => {
       setEntryMap(map);
     });
     return unsubscribe;
-  }, []);
+  }, [coupleId]);
 
-  const getDaysInMonth = (month, year) => new Date(year, month + 1, 0).getDate();
-  const getFirstDayOfMonth = (month, year) => new Date(year, month, 1).getDay();
+  const getDaysInMonth = (month, year) =>
+    new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (month, year) =>
+    new Date(year, month, 1).getDay();
 
   const handleDateClick = (day) => {
-    const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const dayEntries = entryMap[dateKey] || [];
     setSelectedDate(dateKey);
     setSelectedEntries(dayEntries);
@@ -68,13 +78,13 @@ const CalendarPage = () => {
   };
 
   const prevMonth = () => {
-    if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(y => y - 1); }
-    else setCurrentMonth(m => m - 1);
+    if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear((y) => y - 1); }
+    else setCurrentMonth((m) => m - 1);
   };
 
   const nextMonth = () => {
-    if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(y => y + 1); }
-    else setCurrentMonth(m => m + 1);
+    if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear((y) => y + 1); }
+    else setCurrentMonth((m) => m + 1);
   };
 
   const formatDisplayDate = (dateStr) => {
@@ -94,17 +104,15 @@ const CalendarPage = () => {
 
   const daysInMonth = getDaysInMonth(currentMonth, currentYear);
   const firstDay = getFirstDayOfMonth(currentMonth, currentYear);
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
-  // Build calendar grid
   const calendarCells = [];
   for (let i = 0; i < firstDay; i++) calendarCells.push(null);
   for (let d = 1; d <= daysInMonth; d++) calendarCells.push(d);
 
-  // Stats
-  const totalThisMonth = Object.keys(entryMap).filter(k =>
-    k.startsWith(`${currentYear}-${String(currentMonth+1).padStart(2,"0")}`)
-  ).reduce((acc, k) => acc + entryMap[k].length, 0);
+  const totalThisMonth = Object.keys(entryMap)
+    .filter((k) => k.startsWith(`${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`))
+    .reduce((acc, k) => acc + entryMap[k].length, 0);
 
   return (
     <div style={styles.page}>
@@ -121,7 +129,7 @@ const CalendarPage = () => {
           </p>
         </div>
 
-        {/* Stats Row */}
+        {/* Stats */}
         <div style={styles.statsRow}>
           {[
             { label: "Total Memories", value: entries.length, emoji: "💝" },
@@ -138,7 +146,7 @@ const CalendarPage = () => {
 
         {/* Calendar Card */}
         <div style={styles.calendarCard}>
-          {/* Month Navigation */}
+          {/* Month Nav */}
           <div style={styles.monthNav}>
             <button style={styles.navArrow} onClick={prevMonth}>‹</button>
             <div style={styles.monthTitle}>
@@ -155,12 +163,12 @@ const CalendarPage = () => {
             ))}
           </div>
 
-          {/* Calendar Grid */}
+          {/* Grid */}
           <div style={styles.calendarGrid}>
             {calendarCells.map((day, i) => {
               if (!day) return <div key={`empty-${i}`} style={styles.emptyCell} />;
 
-              const dateKey = `${currentYear}-${String(currentMonth+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+              const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
               const hasEntries = !!entryMap[dateKey];
               const entryCount = entryMap[dateKey]?.length || 0;
               const isToday = dateKey === todayKey;
@@ -216,11 +224,18 @@ const CalendarPage = () => {
 
       {/* Day Modal */}
       {showModal && (
-        <div style={styles.modalOverlay} onClick={() => { setShowModal(false); setSelectedDate(null); }}>
+        <div
+          style={styles.modalOverlay}
+          onClick={() => { setShowModal(false); setSelectedDate(null); }}
+        >
           <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <button style={styles.modalClose} onClick={() => { setShowModal(false); setSelectedDate(null); }}>✕</button>
+            <button
+              style={styles.modalClose}
+              onClick={() => { setShowModal(false); setSelectedDate(null); }}
+            >
+              ✕
+            </button>
 
-            {/* Modal Header */}
             <div style={styles.modalHeader}>
               <span style={{ fontSize: "2rem" }}>
                 {selectedEntries.length > 0 ? "💝" : "📭"}
@@ -251,19 +266,26 @@ const CalendarPage = () => {
                   <div
                     key={entry.id}
                     style={styles.entryItem}
-                    onClick={() => setExpandedEntry(expandedEntry?.id === entry.id ? null : entry)}
+                    onClick={() =>
+                      setExpandedEntry(
+                        expandedEntry?.id === entry.id ? null : entry
+                      )
+                    }
                   >
                     <div style={styles.entryItemHeader}>
                       <div style={styles.entryMoodBadge}>
-                        {MOODS.find(m => m.label === entry.mood)?.emoji || "💕"}
+                        {MOODS.find((m) => m.label === entry.mood)?.emoji || "💕"}
                       </div>
                       <div style={{ flex: 1 }}>
                         <p style={styles.entryItemAuthor}>{entry.authorName}</p>
-                        <p style={styles.entryItemTime}>{formatTimestamp(entry.createdAt)}</p>
+                        <p style={styles.entryItemTime}>
+                          {formatTimestamp(entry.createdAt)}
+                        </p>
                       </div>
                       {entry.mood && (
                         <div style={styles.moodTag}>
-                          {MOODS.find(m => m.label === entry.mood)?.emoji} {entry.mood}
+                          {MOODS.find((m) => m.label === entry.mood)?.emoji}{" "}
+                          {entry.mood}
                         </div>
                       )}
                       <span style={styles.expandIcon}>
@@ -275,13 +297,11 @@ const CalendarPage = () => {
                       <h4 style={styles.entryItemTitle}>{entry.title}</h4>
                     )}
 
-                    {/* Expanded content */}
                     {expandedEntry?.id === entry.id && (
                       <div style={styles.expandedContent}>
                         <div style={styles.entryDivider} />
                         <p style={styles.entryFullText}>{entry.text}</p>
 
-                        {/* Media */}
                         {entry.mediaUrls?.length > 0 && (
                           <div style={styles.mediaGrid}>
                             {entry.mediaUrls.map((media, i) => (
@@ -291,12 +311,19 @@ const CalendarPage = () => {
                                     src={media.url}
                                     alt={media.name}
                                     style={styles.mediaImage}
-                                    onClick={(e) => { e.stopPropagation(); window.open(media.url, "_blank"); }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(media.url, "_blank");
+                                    }}
                                   />
                                 ) : media.type?.startsWith("audio/") ? (
                                   <div style={styles.audioItem}>
                                     <span>🎙️</span>
-                                    <audio src={media.url} controls style={{ flex: 1 }} />
+                                    <audio
+                                      src={media.url}
+                                      controls
+                                      style={{ flex: 1 }}
+                                    />
                                   </div>
                                 ) : media.type?.startsWith("video/") ? (
                                   <video
@@ -363,8 +390,7 @@ const styles = {
     border: "1px solid rgba(255,182,193,0.3)",
     boxShadow: "0 4px 20px rgba(180,120,140,0.1)",
     display: "flex", flexDirection: "column",
-    alignItems: "center", gap: "6px",
-    textAlign: "center",
+    alignItems: "center", gap: "6px", textAlign: "center",
   },
   statEmoji: { fontSize: "1.8rem" },
   statValue: {
@@ -414,12 +440,10 @@ const styles = {
   dayHeader: {
     textAlign: "center", fontSize: "0.78rem",
     fontWeight: "700", color: "#b48aff",
-    fontFamily: "'Nunito', sans-serif",
-    padding: "8px 0",
+    fontFamily: "'Nunito', sans-serif", padding: "8px 0",
   },
   calendarGrid: {
-    display: "grid", gridTemplateColumns: "repeat(7, 1fr)",
-    gap: "6px",
+    display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px",
   },
   emptyCell: { height: "64px" },
   dayCell: {
@@ -448,10 +472,7 @@ const styles = {
     transform: "scale(1.05)",
   },
   dayCellFuture: { opacity: 0.5 },
-  dayNumber: {
-    fontSize: "0.9rem", fontWeight: "700",
-    color: "#3d2c2c",
-  },
+  dayNumber: { fontSize: "0.9rem", fontWeight: "700", color: "#3d2c2c" },
   entryDots: { display: "flex", gap: "3px" },
   dot: {
     width: "5px", height: "5px", borderRadius: "50%",
@@ -464,9 +485,8 @@ const styles = {
     letterSpacing: "0.5px",
   },
   legend: {
-    display: "flex", gap: "20px",
-    justifyContent: "center", marginTop: "20px",
-    paddingTop: "16px",
+    display: "flex", gap: "20px", justifyContent: "center",
+    marginTop: "20px", paddingTop: "16px",
     borderTop: "1px solid rgba(255,182,193,0.2)",
   },
   legendItem: {
@@ -490,10 +510,9 @@ const styles = {
     zIndex: 2000, padding: "24px",
   },
   modal: {
-    background: "white", borderRadius: "32px",
-    padding: "36px", maxWidth: "560px", width: "100%",
-    maxHeight: "80vh", overflowY: "auto",
-    position: "relative",
+    background: "white", borderRadius: "32px", padding: "36px",
+    maxWidth: "560px", width: "100%", maxHeight: "80vh",
+    overflowY: "auto", position: "relative",
     boxShadow: "0 24px 64px rgba(180,120,140,0.25)",
     border: "1px solid rgba(255,182,193,0.4)",
   },
@@ -506,8 +525,8 @@ const styles = {
   },
   modalHeader: { textAlign: "center", marginBottom: "16px" },
   modalDate: {
-    fontFamily: "'Playfair Display', serif", fontSize: "1.4rem",
-    color: "#3d2c2c", margin: "8px 0 4px",
+    fontFamily: "'Playfair Display', serif",
+    fontSize: "1.4rem", color: "#3d2c2c", margin: "8px 0 4px",
   },
   modalCount: {
     fontSize: "0.88rem", color: "#9e7676",
@@ -532,13 +551,12 @@ const styles = {
   },
   entriesList: { display: "flex", flexDirection: "column", gap: "12px" },
   entryItem: {
-    background: "#fff8fa", borderRadius: "18px",
-    padding: "18px", border: "1px solid #ffe4e8",
-    cursor: "pointer", transition: "all 0.25s ease",
+    background: "#fff8fa", borderRadius: "18px", padding: "18px",
+    border: "1px solid #ffe4e8", cursor: "pointer",
+    transition: "all 0.25s ease",
   },
   entryItemHeader: {
-    display: "flex", alignItems: "center",
-    gap: "12px",
+    display: "flex", alignItems: "center", gap: "12px",
   },
   entryMoodBadge: {
     width: "40px", height: "40px", borderRadius: "50%",
@@ -565,8 +583,7 @@ const styles = {
   expandIcon: { fontSize: "0.7rem", color: "#9e7676" },
   entryItemTitle: {
     fontFamily: "'Playfair Display', serif",
-    fontSize: "1rem", color: "#3d2c2c",
-    marginTop: "10px",
+    fontSize: "1rem", color: "#3d2c2c", marginTop: "10px",
   },
   expandedContent: { marginTop: "12px" },
   entryDivider: {
@@ -592,13 +609,9 @@ const styles = {
   },
   audioItem: {
     display: "flex", alignItems: "center", gap: "8px",
-    padding: "8px", background: "#fff0f3",
-    borderRadius: "12px",
+    padding: "8px", background: "#fff0f3", borderRadius: "12px",
   },
-  videoItem: {
-    width: "100%", borderRadius: "12px",
-    maxHeight: "200px",
-  },
+  videoItem: { width: "100%", borderRadius: "12px", maxHeight: "200px" },
 };
 
 export default CalendarPage;
